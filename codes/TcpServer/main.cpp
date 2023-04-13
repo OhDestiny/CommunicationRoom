@@ -1,6 +1,29 @@
 #include<stdio.h>
 #include"../SocketInit/SocketInit.hpp"
 
+// 回调函数 将处理数据的逻辑写在回调函数里
+DWORD WINAPI ThreadProc(LPVOID lp) {
+	SOCKET sClient = *(SOCKET*)lp;
+
+	// 接收客户端数据
+	while (true) {
+		// 定义缓冲区
+		char buff[1024] = { 0 };
+
+		// recv 函数接收数据
+		int result = recv(sClient, buff, 1024, 0);
+
+		// 根据返回值 判断是否接收到数据
+		if (result > 0) {
+			printf("接收到的数据是：%s", buff);
+		}
+		else {
+			printf("客户端已经断开连接！");
+			break;
+		}
+	}
+	return NULL;
+}
 
 int main() {
 	SocketInit socketInit;        // 加载socket的动态库
@@ -48,36 +71,24 @@ int main() {
 	sockaddr_in clientAddr;
 	int nlen = sizeof(sockaddr_in);
 
-	// 接收
-	SOCKET sClient = accept(sListen, (sockaddr*)&clientAddr, &nlen);
 
-	if (sClient == SOCKET_ERROR) {
-		printf("接收客户端连接失败！");
-		closesocket(sListen);
-		// return -1;
-	}
-	else {
-		printf("与客户端建立连接！");
-	}
-
-
-	// 接收客户端数据
+	// 一个服务器和多个客户端： 实现思路： while大循环接收连接，然后，创建各自的线程处理每个用户自己的接收消息
+	
 	while (true) {
-		// 定义缓冲区
-		char buff[1024] = { 0 };
+		// 接收
+		SOCKET sClient = accept(sListen, (sockaddr*)&clientAddr, &nlen);
 
-		// recv 函数接收数据
-		int result = recv(sClient, buff, 1024, 0);
-
-		// 根据返回值 判断是否接收到数据
-		if (result > 0) {
-			printf("接收到的数据是：%s", buff);
+		if (sClient == SOCKET_ERROR) {
+			printf("接收客户端连接失败！");
+			closesocket(sListen);
+			return -1;
 		}
 		else {
-			printf("客户端已经断开连接！");
-			break;
+			printf("与客户端建立连接！");
 		}
-	}
+
+		CreateThread(NULL, NULL, ThreadProc, (LPVOID)&sClient, NULL, NULL);                // 创建处理接发数据的子线程 实现回调函数
+	} 
 
 	// 关闭套接字
 	closesocket(sListen);
