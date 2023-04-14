@@ -20,7 +20,7 @@ int main() {
 	sock_in.sin_port = htons(12307);                // 使用的端口号
 	// sock_in.sin_addr.S_un.S_addr = inet_addr("172.24.129.191");            // 客户端的ip地址
 
-	inet_pton(AF_INET, "172.24.129.191", &sock_in.sin_addr.s_addr);//vs2013版本以上使用新的函数转换IP地址
+	inet_pton(AF_INET, "192.168.31.219", &sock_in.sin_addr.s_addr);//vs2013版本以上使用新的函数转换IP地址
 	//InetPton(AF_INET, "127.0.0.1", &sockAddr.sin_addr.s_addr);
 	//sockAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 

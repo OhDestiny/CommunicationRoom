@@ -1,29 +1,6 @@
 #include<stdio.h>
 #include"../SocketInit/SocketInit.hpp"
 
-// 回调函数 将处理数据的逻辑写在回调函数里
-DWORD WINAPI ThreadProc(LPVOID lp) {
-	SOCKET sClient = *(SOCKET*)lp;
-
-	// 接收客户端数据
-	while (true) {
-		// 定义缓冲区
-		char buff[1024] = { 0 };
-
-		// recv 函数接收数据
-		int result = recv(sClient, buff, 1024, 0);
-
-		// 根据返回值 判断是否接收到数据
-		if (result > 0) {
-			printf("接收到的数据是：%s", buff);
-		}
-		else {
-			printf("客户端已经断开连接！");
-			break;
-		}
-	}
-	return NULL;
-}
 
 int main() {
 	SocketInit socketInit;        // 加载socket的动态库
@@ -66,28 +43,70 @@ int main() {
 		printf("监听失败！\n");
 	}
 
-	// 接收客户端连接
-	// 创建一个客户端的socket
-	sockaddr_in clientAddr;
-	int nlen = sizeof(sockaddr_in);
-
-
-	// 一个服务器和多个客户端： 实现思路： while大循环接收连接，然后，创建各自的线程处理每个用户自己的接收消息
+	// 一个服务器和多个客户端： 
+	// 实现思路一： while大循环接收连接，然后，创建各自的线程处理每个用户自己的接收消息
+	// 实现思路二： 使用select模型
 	
+	FD_SET fd_read;                     // 存储scoket对象
+	FD_ZERO(&fd_read);                  // 初始化fd_read
+	FD_SET(sListen, &fd_read);          
+	FD_SET fd_tmp;                      // 每次使用的临时socket数组
+
 	while (true) {
-		// 接收
-		SOCKET sClient = accept(sListen, (sockaddr*)&clientAddr, &nlen);
-
-		if (sClient == SOCKET_ERROR) {
-			printf("接收客户端连接失败！");
-			closesocket(sListen);
-			return -1;
-		}
-		else {
-			printf("与客户端建立连接！");
+		fd_tmp = fd_read;
+		const timeval tv = {1,0};
+		int ret = select(NULL, &fd_tmp, NULL, NULL, &tv);                  // 筛选出有网络事件的socket 留在fd_read中
+		if (ret == 0) {
+			Sleep(1);
+			continue;
 		}
 
-		CreateThread(NULL, NULL, ThreadProc, (LPVOID)&sClient, NULL, NULL);                // 创建处理接发数据的子线程 实现回调函数
+		// 循环判断此时的fd_read里面的socket类型，从而判断该执行什么判断
+		for (int i = 0; i < fd_tmp.fd_count;i++) {
+			// 如果是监听套接字有网络事件，那么证明有客户端在连接服务器
+			if (fd_tmp.fd_array[i] == sListen) {
+
+				// 接收客户端连接
+				// 创建一个客户端的socket
+				sockaddr_in clientAddr;
+				int nlen = sizeof(sockaddr_in);
+
+				// 接收
+				SOCKET sClient = accept(sListen, (sockaddr*)&clientAddr, &nlen);
+
+				if (sClient == SOCKET_ERROR) {
+					printf("接收客户端连接失败！");
+					closesocket(sListen);
+					return -1;
+				}
+				else {
+					printf("客户端已经建立连接：%s...",inet_ntoa(clientAddr.sin_addr));
+					FD_SET(sClient,&fd_read);                     // 需要将申请连接的那个客户端的socket也加入到队列当中
+				}
+
+			}
+			// 如果是客户端套接字有网络事件，那么证明有客户端在接发消息
+			else {
+				// 定义缓冲区
+				char buff[1024] = { 0 };
+
+				// recv 函数接收数据
+				int result = recv(fd_tmp.fd_array[i], buff, 1024, 0);
+
+				// 根据返回值 判断是否接收到数据
+				if (result > 0) {
+					printf("接收到的数据是：%s", buff);
+				}
+				else {
+					// 断开连接时需要移除断开连接的这个socket对象
+					FD_CLR(fd_tmp.fd_array[i], &fd_read);
+					printf("客户端已经断开连接！");
+					break;
+				}
+			}
+		}
+
+
 	} 
 
 	// 关闭套接字
